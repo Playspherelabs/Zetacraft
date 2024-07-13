@@ -6,17 +6,18 @@ import React, {
   useEffect,
   useState,
 } from "react"
-import { ZetaChainClient } from "@zetachain/toolkit/client"
 import { useEthersSigner } from "./useEthersSigner"
 
 const ZetaChainContext = createContext<any>(undefined!)
 
 interface ZetaChainProviderProps {
   children: ReactNode
-}
+} 
 
 export function ZetaChainProvider({ children }: ZetaChainProviderProps) {
   const signer = useEthersSigner()
+  //Todo: Modify this client since it is hotfix for now
+  const ZetaChainClient = require('@zetachain/toolkit/client');
 
   const createClient = useCallback((signer: any) => {
     return new ZetaChainClient({
