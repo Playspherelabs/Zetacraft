@@ -27,7 +27,7 @@ import {
   defaultRecipeMap,
 } from "utils/defaultObject";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { ZetaRecipeAbi } from "constants/ZetaRecipeAbi";
+import { ZetaRecipeAbi } from "constants/MugenRecipeAbi";
 import { addresses } from "constants/addresses";
 import { toast } from "sonner";
 

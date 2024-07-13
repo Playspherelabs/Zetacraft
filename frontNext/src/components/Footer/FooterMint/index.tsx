@@ -13,7 +13,7 @@ import {
 } from "wagmi";
 import { parseEther } from "viem";
 import { ConnectWallet } from "components/Button/ConnectWallet";
-import { ZetaTokenAbi } from "constants/ZetaTokenAbi";
+import { ZetaTokenAbi } from "constants/MugenTokenAbi";
 import { addresses } from "constants/addresses";
 
 const FEE = "0.000025";

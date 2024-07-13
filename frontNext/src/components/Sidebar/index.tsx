@@ -2,9 +2,10 @@ import React, { useState, useEffect } from "react";
 import { Node } from "reactflow";
 import { ConnectWallet } from "components/Button/ConnectWallet";
 import { useAccount, useReadContracts } from "wagmi";
-import { ZetaRecipeAbi } from "constants/ZetaRecipeAbi";
-import { ZetaTokenAbi } from "constants/ZetaTokenAbi";
+import { ZetaRecipeAbi } from "constants/MugenRecipeAbi";
+import { ZetaTokenAbi } from "constants/MugenTokenAbi";
 import { addresses } from "constants/addresses";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 let tapSound: any = null;
 if (typeof window !== "undefined") {
@@ -115,7 +116,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sideNodes: sideNodes }) => {
             </div>
           )}
 
-          <ConnectWallet />
+          <ConnectButton />
         </div>
         <div className="mt-4 flex-grow" style={{ overflowY: 'auto', maxHeight: maxHeight }}>
           <div className="flex flex-wrap">
