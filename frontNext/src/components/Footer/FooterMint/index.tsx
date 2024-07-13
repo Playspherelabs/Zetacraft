@@ -1,7 +1,6 @@
 /* eslint-disable react/no-unescaped-entities */
 import React, { useState, useEffect } from "react";
 import { Node } from "reactflow";
-import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { useToast } from "@/components/ui/use-toast";
 import LoadingIndicator from "components/LoadingIndicator";
 import {

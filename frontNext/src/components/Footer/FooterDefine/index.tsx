@@ -64,7 +64,7 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
     }
 
     setIsButtonDisabled(isDisabled);
-  }, [footerInput.label]);
+  }, [footerInput.label,toast]);
 
   if (!nodeA || !nodeB) return null;
 

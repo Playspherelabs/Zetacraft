@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react"
 import { ZetaChainClient } from "@zetachain/toolkit/client"
-
 import { useEthersSigner } from "./useEthersSigner"
 
 const ZetaChainContext = createContext<any>(undefined!)
