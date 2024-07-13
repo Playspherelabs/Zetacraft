@@ -40,6 +40,5 @@ Our work is inspired by the wonderful games.
 
 - https://foodformer.com/ 
 - https://neal.fun/infinite-craft/
-# EndlessCraft
-# Zetacraft
-# Zetacraft
+
+Mugen Craft Inspired on Zeta Chain
