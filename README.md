@@ -29,16 +29,13 @@ cp .env.sample .env
 bun install
 bun dev
 ```
+## Chain
+Zetachain
+## Library
+React Flow
 
-## Tech stack
-- Vercel KV (https://vercel.com/docs/storage/vercel-kv )
-- Base (https://base.org/ )
-- React flow (https://reactflow.dev/ )
-
-## Great reference
+## Reference
 Our work is inspired by the wonderful games.
-
-- https://foodformer.com/ 
 - https://neal.fun/infinite-craft/
 
 Mugen Craft Inspired on Zeta Chain
