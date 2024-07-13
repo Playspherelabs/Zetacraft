@@ -1,0 +1,1370 @@
+/* eslint-disable react/no-unescaped-entities */
+import React, { useState, useEffect } from "react";
+import { Node } from "reactflow";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { useToast } from "@/components/ui/use-toast";
+import LoadingIndicator from "components/LoadingIndicator";
+import {
+  useAccount,
+  useWriteContract,
+  useReadContract,
+  useReadContracts,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { parseEther } from "viem";
+import { ConnectWallet } from "components/Button/ConnectWallet";
+import { ZetaTokenAbi } from "constants/ZetaTokenAbi";
+import { addresses } from "constants/addresses";
+
+const FEE = "0.000025";
+interface FooterMintProps {
+  node: Node | undefined;
+  nodeA: Node | undefined;
+  nodeB: Node | undefined;
+}
+
+const FooterMint: React.FC<FooterMintProps> = ({ node, nodeA, nodeB }) => {
+  const { address, isConnected } = useAccount();
+  const { data: hash, isPending, error, writeContract } = useWriteContract();
+  const [sum, setSum] = useState(0);
+  const [minted, setMinted] = useState(false);
+  const { toast } = useToast();
+
+  const ZetaTokenContract = {
+    address: addresses.ZetaToken as `0x${string}`,
+    abi: ZetaTokenAbi,
+  } as const;
+
+  const results = useReadContracts({
+    contracts: [
+      {
+        ...ZetaTokenContract,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`, BigInt(node!.data.craft_id)],
+      },
+      {
+        ...ZetaTokenContract,
+        functionName: "totalSupply",
+        args: [BigInt(node!.data.craft_id)],
+      },
+    ],
+  });
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash,
+    });
+  useEffect(() => {
+    if (results.isSuccess) {
+      const resultBalance = results.data[0].result;
+      setMinted(
+        resultBalance != null && parseInt(resultBalance.toString()) > 0
+      );
+
+      const resultTotalSupply = results.data[1].result;
+      const sum =
+        resultTotalSupply != null ? parseInt(resultTotalSupply.toString()) : 0;
+      setSum(sum);
+    }
+  }, [results, hash]);
+
+  useEffect(() => {
+    if (isConfirmed) {
+      toast({
+        title: "Transaction confirmed",
+        description: hash,
+      });
+      setMinted(true);
+    }
+  }, [isConfirmed, hash, toast]);
+
+  const writeMint = async () => {
+    writeContract({
+      address: addresses.ZetaToken as `0x${string}`,
+      abi: ZetaTokenAbi,
+      functionName: "mint",
+      args: [
+        address as `0x${string}`,
+        BigInt(node!.data.craft_id),
+        BigInt(nodeA?.data.craft_id),
+        BigInt(nodeB?.data.craft_id),
+      ],
+      value: parseEther(FEE),
+    });
+  };
+
+  if (!node) return null;
+
+  return (
+    <>
+      <div className="left-12 inset-x-0 bottom-0 bg-white p-4 flex items-center justify-center z-10 mx-auto">
+        <p className="mx-2 font-bold">
+          {`${sum} minted`}
+        </p>
+        <div className="mx-2 items-center border border-gray-100 bg-gray-100 rounded-md">
+          {node.data.label ? (
+            <div className="p-2">
+              <span className="font-bold">{`${node.data.emoji}${node.data.label}`}</span>
+            </div>
+          ) : null}
+        </div>
+        <p className="mx-2">{" -> "}</p>
+        {isConnected ? (
+          <button
+            disabled={minted || isPending || isConfirming}
+            className={`${
+              !minted
+                ? "bg-blue hover:bg-blueHover"
+                : "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+            } mx-2 text-white font-bold py-2 px-4 rounded m-1`}
+            onClick={writeMint}
+          >
+            {isPending || isConfirming ? (
+              <LoadingIndicator />
+            ) : minted ? (
+              "Already minted"
+            ) : (
+              "Mint"
+            )}
+          </button>
+        ) : (
+          <ConnectWallet buttonText="Connect for mint recipe" />
+        )}
+        {/* for test <div>Uri: {uri?.toString()}</div> */}
+      </div>
+    </>
+  );
+};
+
+export default FooterMint;
+/* eslint-disable react/no-unescaped-entities */
+import React, { useState, useEffect } from "react";
+import { Node } from "reactflow";
+import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
+import { useToast } from "@/components/ui/use-toast";
+import Image from "next/image";
+import { useAccount } from "wagmi";
+import { ConnectWallet } from "components/Button/ConnectWallet";
+import LoadingIndicator from "components/LoadingIndicator";
+import {
+  InformationCircleIcon,
+} from '@heroicons/react/20/solid'
+interface FooterDefineProps {
+  nodeA: Node | undefined;
+  nodeB: Node | undefined;
+  footerInput: { label: string; emoji: string };
+  setFooterInput: React.Dispatch<
+    React.SetStateAction<{ label: string; emoji: string }>
+  >;
+  updateNodeFromFooter: () => void;
+  isLoading: boolean;
+}
+
+const FooterDefine: React.FC<FooterDefineProps> = ({
+  nodeA,
+  nodeB,
+  footerInput,
+  setFooterInput,
+  updateNodeFromFooter,
+  isLoading,
+}) => {
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isButtonDisabled, setIsButtonDisabled] = useState(true);
+  const [validationMessage, setValidationMessage] = useState("");
+  const { toast } = useToast();
+  const { isConnected } = useAccount();
+  const [isHovered, setIsHovered] = useState(false);
+
+  useEffect(() => {
+    // Disable buttons by default
+    let isDisabled = true;
+    let message = "";
+
+    if (footerInput.label.length === 0) {
+      // Empty input does not display a message and disables the button
+      message = "";
+    } else if (footerInput.label.length > 30) {
+      message = "The label must be within 30 characters.";
+    } else if (!/^[A-Z]/.test(footerInput.label)) {
+      message = "The first character must be an uppercase letter.";
+    } else if (!/^[A-Z][A-Za-z0-9 ]*$/.test(footerInput.label)) {
+      message = "Use only alphanumeric characters and spaces.";
+    } else {
+      // If all validations are passed, activate the button
+      isDisabled = false;
+      message = ""; // Clear if no validation message
+    }
+
+    if (message) {
+      toast({
+        title: "Input alert🚨",
+        description: message,
+      });
+    }
+
+    setIsButtonDisabled(isDisabled);
+  }, [footerInput.label]);
+
+  if (!nodeA || !nodeB) return null;
+
+  return (
+    <>
+      <div className="flex items-left">
+        <p className="ml-4 font-bold text-gray-400">
+          Good recipe creator will be rewarded!
+        </p>
+        <div
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
+          className="relative"
+        >
+          <InformationCircleIcon className="h-auto w-6 text-gray-400 ml-2" />
+          {isHovered && (
+            <div className="absolute z-30 left-full -top-48 p-4 bg-white shadow-lg rounded-lg text-sm w-[720px]">
+              <p className="font-bold mb-2">Here's how you can earn points through recipe creation:</p>
+              <ul className="list-disc list-inside">
+                <li>Creating a Recipe: You'll earn <strong className="text-blue">200 points</strong> when you define a new recipe.</li>
+                <li>Recipe Minting: Each time someone mints your recipe, you'll receive <strong className="text-blue">100 points</strong>, with no limit on the number of mints.</li>
+                <li>Recipe Assistance: If your recipe is used in the creation of another recipe, and that recipe gets minted, you'll earn <strong className="text-blue">50 points</strong>.</li>
+              </ul>
+              <p className="mt-2">This system encourages the creation of practical and valuable recipes. Points will not be awarded for random or nonsensical recipes.</p>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="left-12 bottom-0 bg-white shadow-md p-4 flex justify-between items-center z-10">
+        <div className="relative flex items-center justify-center space-x-4">
+          <div className="flex items-center border border-gray-100 bg-gray-100 rounded-md">
+            {nodeA.data.label ? (
+              <div className="p-2">
+                <span className="font-bold">{`${nodeA.data.emoji}${nodeA.data.label}`}</span>
+              </div>
+            ) : null}
+          </div>
+          <span className="flex items-center">+</span>
+          <div className="flex items-center border border-gray-100 bg-gray-100 rounded-md">
+            {nodeB.data.label ? (
+              <div className="p-2">
+                <span className="font-bold">{`${nodeB.data.emoji}${nodeB.data.label}`}</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+        <span className="flex items-center mx-2">=</span>
+
+        <button className="flex items-center justify-between border border-gray-300 text-gray-400  py-2 px-2 rounded min-w-40">
+          <div>
+            {footerInput.emoji.length > 0 ? footerInput.emoji : "Emoji"}
+          </div>
+
+          <div className="flex-shrink-0 flex items-center">
+            <Image
+              src="/svg/emoji-smile.svg"
+              alt="Smile emoji"
+              width="20"
+              height="20"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowEmojiPicker(!showEmojiPicker);
+              }}
+              className="hover:fill-orange"
+            />
+            <Image
+              src="/svg/trash.svg"
+              alt="Delete emoji"
+              width="20"
+              height="20"
+              onClick={(e) => {
+                e.stopPropagation();
+                setFooterInput((prev) => {
+                  const emojis = prev.emoji.split(" ").filter(Boolean);
+                  emojis.pop();
+                  return { ...prev, emoji: emojis.join(" ") };
+                });
+              }}
+              className="hover:fill-orange ml-2"
+            />
+          </div>
+        </button>
+
+        {showEmojiPicker && (
+          <>
+            <div
+              className="fixed inset-0"
+              onClick={() => setShowEmojiPicker(false)} // Close EmojiPicker when the overlay is clicked.
+            ></div>
+            <div className="fixed left-12 bottom-0 bg-white shadow-md p-4 flex justify-between items-center z-100">
+              <EmojiPicker
+                onEmojiClick={(emojiData: EmojiClickData, event: MouseEvent) => {
+                  setFooterInput((prev) => {
+                    const emojiCount = prev.emoji
+                      .split(" ")
+                      .filter(Boolean).length;
+
+                    if (emojiCount < 3) {
+                      const newEmoji =
+                        prev.emoji + (prev.emoji ? " " : "") + emojiData.emoji;
+                      return { ...prev, emoji: newEmoji };
+                    } else {
+                      toast({
+                        title: "Input alert🚨",
+                        description: "Maximum of 3 emojis",
+                      });
+                      return prev;
+                    }
+                  });
+                  setShowEmojiPicker(false);
+                }}
+                autoFocusSearch={false}
+              />
+            </div>
+          </>
+        )}
+
+        <input
+          type="text"
+          name="label"
+          placeholder="Label"
+          value={footerInput.label}
+          onChange={(e) =>
+            setFooterInput((prev) => ({ ...prev, label: e.target.value }))
+          }
+          onMouseDown={(e) => e.stopPropagation()}
+          className="border border-gray-300 rounded-md p-2 m-1 flex-1"
+        />
+        {isConnected ? (
+          <button
+            onClick={updateNodeFromFooter}
+            disabled={isButtonDisabled}
+            className={`${
+              isButtonDisabled
+                ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                : "bg-blue hover:bg-blueHover"
+            } text-white font-bold py-2 px-4 rounded m-1`}
+          >
+            {isLoading ? (
+              <LoadingIndicator />
+            ) : "Define"}
+          </button>
+        ) : (
+          <ConnectWallet />
+        )}
+      </div>
+    </>
+  );
+};
+
+export default FooterDefine;
+import { ConnectKitButton } from "connectkit";
+
+import styled from "styled-components";
+const StyledButton = styled.button`
+  cursor: pointer;
+  position: relative;
+  display: inline-block;
+  padding: 8px 16px;
+  color: #ffffff;
+  background: #1652F0;
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 24px -6px #1652F0;
+
+  transition: 200ms ease;
+  &:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 6px 40px -6px #1652F0;
+  }
+  &:active {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 32px -6px #1652F0;
+  }
+`;
+
+export const ConnectWallet = ({ buttonText = "Connect Wallet" }) => {
+  return (
+    <ConnectKitButton.Custom>
+      {({ isConnected, show, truncatedAddress, ensName }) => {
+        return (
+          <StyledButton onClick={show}>
+            {isConnected ? ensName ?? truncatedAddress : buttonText}
+          </StyledButton>
+        );
+      }}
+    </ConnectKitButton.Custom>
+  );
+};
+import React, { useState, useEffect } from "react";
+import { Node } from "reactflow";
+import { ConnectWallet } from "components/Button/ConnectWallet";
+import { useAccount, useReadContracts } from "wagmi";
+import { ZetaRecipeAbi } from "constants/ZetaRecipeAbi";
+import { ZetaTokenAbi } from "constants/ZetaTokenAbi";
+import { addresses } from "constants/addresses";
+
+let tapSound: any = null;
+if (typeof window !== "undefined") {
+  tapSound = new Audio("/se/tap.mp3");
+}
+
+interface SidebarProps {
+  sideNodes: Node[];
+}
+
+const Sidebar: React.FC<SidebarProps> = ({ sideNodes: sideNodes }) => {
+  const { address, isConnected } = useAccount();
+  const [showDetails, setShowDetails] = useState(false);
+
+  const onDragStart = (
+    event: React.DragEvent<HTMLDivElement>,
+    nodeType: string
+  ) => {
+    event.dataTransfer.setData("application/reactflow", nodeType);
+    event.dataTransfer.effectAllowed = "move";
+    tapSound
+      .play()
+      .catch((err: Error) => console.error("Audio play failed:", err));
+  };
+
+  const ZetaTokenContract = {
+    address: addresses.ZetaToken as `0x${string}`,
+    abi: ZetaTokenAbi,
+  } as const;
+
+  const ZetaRecipeContract = {
+    address: addresses.ZetaRecipe as `0x${string}`,
+    abi: ZetaRecipeAbi,
+  } as const;
+
+  const results = useReadContracts({
+    contracts: [
+      {
+        ...ZetaTokenContract,
+        functionName: "mintPoints",
+        args: [address as `0x${string}`],
+      },
+      {
+        ...ZetaRecipeContract,
+        functionName: "recipePoints",
+        args: [address as `0x${string}`],
+      },
+      {
+        ...ZetaTokenContract,
+        functionName: "recipeCreatorPoints",
+        args: [address as `0x${string}`],
+      },
+      {
+        ...ZetaTokenContract,
+        functionName: "refferalRecipeCreatorPoints",
+        args: [address as `0x${string}`],
+      },
+    ],
+  });
+
+  // Calculate total points
+  const totalPoints = results.isSuccess ? results.data.reduce((total, current) => {
+    const points = Number(current.result?.toString()) || 0;
+    return total + points;
+  }, 0) : 0;
+
+  const maxHeight = 'calc(100vh - 160px)';
+
+  return (
+    <div className="w-[400px] border-l border-gray-400">
+      <div className="shadow-custom px-2 flex flex-col justify-between min-h-screen">
+        <div className="relative flex items-center justify-between p-2 border-b border-gray-200">
+          <button
+            className="px-4 py-2 bg-white text-blue border border-blue rounded-xl mr-4 hover:bg-blue hover:text-white"
+            onClick={() => setShowDetails(!showDetails)}
+          >
+            Points
+          </button>
+          {showDetails && (
+            <div className="absolute top-full w-full p-6 rounded-lg shadow-lg border border-gray-200 z-50 bg-white">
+              <span className="text-lg font-semibold text-gray-800">Your points</span>
+              <p className="text-2xl font-bold text-gray-900 py-4 border-b border-gray-200">
+                {totalPoints.toLocaleString()} points
+              </p>
+              <div className="mt-6 space-y-2">
+                {results.isSuccess && (
+                  <>
+                    <div className="flex items-center text-gray-700">
+                      <span className="inline-block w-4 h-4 mr-2 rounded-full bg-green-500"></span>
+                      Object minted {results.data[0].result?.toString() || 0}
+                    </div>
+                    <div className="flex items-center text-gray-700">
+                      <span className="inline-block w-4 h-4 mr-2 rounded-full bg-yellow-500"></span>
+                      Recipe Created {results.data[1].result?.toString() || 0}
+                    </div>
+                    <div className="flex items-center text-gray-700">
+                      <span className="inline-block w-4 h-4 mr-2 rounded-full bg-purple-500"></span>
+                      Your recipe minted {results.data[2].result?.toString() || 0}
+                    </div>
+                    <div className="flex items-center text-gray-700">
+                      <span className="inline-block w-4 h-4 mr-2 rounded-full bg-red-500"></span>
+                      Your recipe assist {results.data[3].result?.toString() || 0}
+                    </div>
+                  </>
+                
+                )}
+              </div>
+            </div>
+          )}
+
+          <ConnectWallet />
+        </div>
+        <div className="mt-4 flex-grow" style={{ overflowY: 'auto', maxHeight: maxHeight }}>
+          <div className="flex flex-wrap">
+            {sideNodes.map((node, i) => (
+              <div
+                key={node.id}
+                className="relative border border-gray-300 bg-white p-2 m-1 rounded-md overflow-hidden hover:bg-gradient-to-b"
+                onDragStart={(event) => onDragStart(event, node.data.craft_id)}
+                draggable
+              >
+                <span className="font-bold mr-1">{node.data.emoji}</span>
+                <span className="font-bold">{node.data.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="p-4 text-center border-t border-gray-200 flex items-center justify-center h-12">
+          <ul className="flex flex-wrap items-center mt-3 text-sm  text-gray-400 sm:mt-0">
+            <li>
+              <a
+                target="_blank"
+                href="https://twitter.com/0xbaratie"
+                className="hover:underline me-4 md:me-6"
+              >
+                X
+              </a>
+            </li>
+            <li>
+              <a
+                target="_blank"
+                href="https://github.com/0xbaratie/ZetaCraft"
+                className="hover:underline me-4 md:me-6"
+              >
+                Github
+              </a>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Sidebar;
+import React from 'react';
+
+const LoadingIndicator: React.FC = () => {
+    return (
+        <>
+            <svg aria-hidden="true" className="inline mr-3 w-4 h-4 text-white animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"></path>
+                <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentColor"></path>
+            </svg>
+            Loading...
+        </>
+    );
+};
+
+export default LoadingIndicator;
+import { useCallback, useState, useRef, useEffect } from "react";
+import ReactFlow, {
+  Node,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  Connection,
+  Edge,
+  ConnectionLineType,
+  Controls,
+  Background,
+} from "reactflow";
+import FooterDefine from "components/Footer/FooterDefine";
+import FooterMint from "components/Footer/FooterMint";
+import Sidebar from "components/Sidebar";
+import CustomNode from "./CustomNode";
+import {
+  orderIds,
+  getCraftApi,
+  postCraftApi,
+  getRecipeApi,
+  postRecipeApi,
+} from "utils/utils";
+import {
+  defaultSideNodes,
+  defaultNodeMap,
+  defaultRecipeMap,
+} from "utils/defaultObject";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { ZetaRecipeAbi } from "constants/ZetaRecipeAbi";
+import { addresses } from "constants/addresses";
+import { toast } from "sonner";
+
+let fusionSound: any = null;
+if (typeof window !== "undefined") {
+  fusionSound = new Audio("/se/new-discover.mp3");
+}
+
+let flow_id = 1;
+let nodeMap: { [key: string]: Node } = defaultNodeMap;
+const recipeMap: { [key: string]: string } = defaultRecipeMap;
+
+const Flow: React.FC = () => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([
+    { id: "e1-2", source: "1", target: "2" },
+    { id: "e1-3", source: "1", target: "3" },
+  ]);
+  const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
+  const [isFooterDefineVisible, setIsFooterDefineVisible] = useState(true);
+  const [isFooterMintVisible, setIsFooterMintVisible] = useState(false);
+  const [footerNode, setFooterNode] = useState<Node | undefined>();
+  const [footerNodeA, setFooterNodeA] = useState<Node | undefined>();
+  const [footerNodeB, setFooterNodeB] = useState<Node | undefined>();
+  const [footerInput, setFooterInput] = useState({ emoji: "", label: "" });
+  const [sideNodes, setSideNodes] = useState<Node[]>([]);
+  const { data: hash, isPending,  writeContract } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess: isConfirmed } = 
+    useWaitForTransactionReceipt({ 
+      hash, 
+    }) 
+
+  const addSideNode = (node: Node) => {
+    //if already exists, don't add
+    if (sideNodes.find((n) => n.data.craft_id === node.data.craft_id)) {
+      return;
+    }
+    setSideNodes((currentNodes) => currentNodes.concat(node));
+  };
+
+  const getMaxCraftId = async (): Promise<number> => {
+    const res = await fetch("/api/keys");
+    const data = await res.json();
+    //TODO
+    const initialNodeCount = 600;
+    return data.length + initialNodeCount;
+  };
+
+  //recipe
+  const getRecipeMap = (idA: string, idB: string): string => {
+    // align a and b to be in ascending order
+    [idA, idB] = orderIds(idA, idB);
+    return recipeMap[`${idA}_${idB}`];
+  };
+
+  const getRecipeMapByApi = async (
+    idA: string,
+    idB: string
+  ): Promise<string> => {
+    [idA, idB] = orderIds(idA, idB);
+    const res = await getRecipeApi(`${idA}_${idB}`);
+    if (!res) {
+      return "";
+    }
+    return res.craft_id;
+  };
+
+  //craft
+  const getNodeMap = (id: string): Node => {
+    return nodeMap[id];
+  };
+
+  const getNodeMapByApi = async (id: string): Promise<Node> => {
+    const res = await getCraftApi(id);
+    return {
+      id: "",
+      type: "custom",
+      data: { craft_id: res.craft_id, emoji: res.emoji, label: res.label },
+      position: { x: 0, y: 0 },
+    };
+  };
+
+  const addNodeMap = async (craft_id: string, emoji: string, label: string) => {
+    nodeMap[craft_id] = {
+      id: "",
+      type: "custom",
+      data: { craft_id: craft_id, emoji: emoji, label: label },
+      position: { x: 0, y: 0 },
+    };
+    await postCraftApi(craft_id, footerInput.emoji, footerInput.label);
+  };
+
+  //footer function
+  const updateNodeFromFooter = async () => {
+    if (!footerNodeA || !footerNodeB) {
+      return;
+    }
+
+    const position = {
+      x: (footerNodeA.position.x + footerNodeB.position.x) / 2,
+      y: (footerNodeA.position.y + footerNodeB.position.y) / 2,
+    };
+
+    const new_craft_id = (await getMaxCraftId()) + 1 + "";
+    console.log("new_craft_id", new_craft_id);
+    const [craft_idA, craft_idB] = orderIds(
+      footerNodeA.data.craft_id,
+      footerNodeB.data.craft_id
+    );
+
+    // add Contract
+    writeContract(
+      {
+        address: addresses.ZetaRecipe as `0x${string}`,
+        abi: ZetaRecipeAbi,
+        functionName: "setRecipe",
+        args: [
+          BigInt(new_craft_id),
+          footerInput.label,
+          `${footerInput.emoji} ${footerInput.label}`,
+          BigInt(craft_idA),
+          BigInt(craft_idB),
+        ],
+      },
+      {
+        onSuccess(data, variables, context) {
+          // add KV and local storage
+          addNodeMap(new_craft_id, footerInput.emoji, footerInput.label);
+          recipeMap[`${craft_idA}_${craft_idB}`] = new_craft_id; //add recipeMap
+          postRecipeApi(`${craft_idA}_${craft_idB}`, new_craft_id);
+
+          const newNode: Node = {
+            id: `${flow_id++}`,
+            type: "custom",
+            data: {
+              craft_id: new_craft_id,
+              emoji: footerInput.emoji,
+              label: footerInput.label,
+            },
+            position: position,
+          };
+
+          // unite footerNodeA and footerNodeB into new node
+          setNodes((currentNodes) =>
+            currentNodes
+              .filter((n) => n.id !== footerNodeA.id && n.id !== footerNodeB.id)
+              .concat(newNode)
+          );
+
+          addSideNode({
+            ...newNode,
+            id: "",
+            position: { x: 0, y: 0 },
+          });
+
+          toast("New recipe has been defined!", {
+            action: {
+              label: "Share on X",
+              onClick: () => {
+                const shareText = encodeURIComponent(
+                  `I defined a new recipe for Zeta Craft.\nThe recipe count reached ${new_craft_id}. @0xBaratie @nealagarwal\nhttps://Zetacraft.vercel.app/`
+                );
+                const hashtags = encodeURIComponent("Zetacraft,buildonbase");
+                const related = encodeURIComponent("twitterapi,twitter");
+                const url = `https://twitter.com/intent/tweet?text=${shareText}&hashtags=${hashtags}&related=${related}`;
+                const newWindow = window.open(url, "_blank");
+                newWindow?.focus();
+              },
+            },
+          });
+
+          setIsFooterDefineVisible(false);
+          setIsFooterMintVisible(true);
+          setFooterNode(newNode);
+          // setFooterNodeA(undefined);
+          // setFooterNodeB(undefined);
+          fusionSound
+            .play()
+            .catch((err: Error) => console.error("Audio play failed:", err));
+        },
+      }
+    );
+  };
+
+  //flow functions
+  const onConnect = useCallback(
+    (params: Connection | Edge) => setEdges((eds) => addEdge(params, eds)),
+    [setEdges]
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const onDrop = useCallback(
+    async (event: React.DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+
+      const reactFlowBounds = event.currentTarget.getBoundingClientRect();
+      const id = event.dataTransfer.getData("application/reactflow");
+
+      if (typeof id === "undefined" || !id) {
+        // TODO message.warning("Node type not found!");
+        return;
+      }
+
+      const position = reactFlowInstance.project({
+        x: event.clientX - reactFlowBounds.left,
+        y: event.clientY - reactFlowBounds.top,
+      });
+
+      let baseNode = getNodeMap(id);
+      if (!baseNode) {
+        baseNode = await getNodeMapByApi(id);
+      }
+      if (!baseNode) {
+        // message.warning("Node type not found!"); //TODO
+        return;
+      }
+
+      const newNode: Node = {
+        ...baseNode,
+        id: `${flow_id++}`,
+        position: position,
+      };
+
+      setNodes((currentNodes) => {
+        const updatedNodes = currentNodes.concat(newNode);
+        return updatedNodes;
+      });
+    },
+    [reactFlowInstance, setNodes]
+  );
+
+  const nodesOverlap = (nodeA: Node, nodeB: Node): boolean => {
+    const buffer = 50; // A buffer to account for node size; adjust as needed
+    return (
+      Math.abs(nodeA.position.x - nodeB.position.x) < buffer &&
+      Math.abs(nodeA.position.y - nodeB.position.y) < buffer
+    );
+  };
+
+  const checkNodesOverlap = (nodes: Node[]) => {
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        if (nodesOverlap(nodes[i], nodes[j])) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  const onNodeDrag = async (event: React.MouseEvent, node: Node) => {
+    setIsFooterDefineVisible(false);
+    setIsFooterMintVisible(false);
+  };
+
+  const onNodeDragStop = async (event: React.MouseEvent, node: Node) => {
+    // Find if the dragged node overlaps with any other node
+    const overlappingNode = nodes.find(
+      (n) => n.id !== node.id && nodesOverlap(n, node)
+    );
+
+    if (checkNodesOverlap(nodes)) {
+      setIsFooterDefineVisible(false);
+    }
+
+    if (overlappingNode) {
+      // get new craft_id by getRecipeId
+      let newCraftId = getRecipeMap(
+        node.data.craft_id,
+        overlappingNode.data.craft_id
+      );
+      // console.log("newCraftId by getRecipeMap", newCraftId);
+      if (!newCraftId) {
+        newCraftId = await getRecipeMapByApi(
+          node.data.craft_id,
+          overlappingNode.data.craft_id
+        );
+        // console.log("newCraftId by getRecipeMapByApi", newCraftId);
+      }
+      // console.log("newCraftId", newCraftId);
+
+      // recipe exists
+      if (newCraftId) {
+        // if node exists in local storage
+        let _newNode = getNodeMap(newCraftId);
+        if (!_newNode) {
+          _newNode = await getNodeMapByApi(newCraftId);
+        }
+        if (!_newNode) {
+          // message.warning("Node type not found!"); //TODO
+          return;
+        }
+
+        const newNode: Node = {
+          ..._newNode,
+          id: `${flow_id++}`,
+          position: {
+            x: (node.position.x + overlappingNode.position.x) / 2,
+            y: (node.position.y + overlappingNode.position.y) / 2,
+          },
+        };
+
+        // Remove the original nodes and add the new node
+        setNodes((currentNodes) =>
+          currentNodes
+            .filter((n) => n.id !== node.id && n.id !== overlappingNode.id)
+            .concat(newNode)
+        );
+
+        addSideNode({
+          ..._newNode,
+          id: "",
+          position: { x: 0, y: 0 },
+        });
+
+        setIsFooterDefineVisible(false);
+        setIsFooterMintVisible(true);
+        setFooterNode(_newNode);
+        setFooterNodeA(node);
+        setFooterNodeB(overlappingNode);
+        fusionSound
+          .play()
+          .catch((err: Error) => console.error("Audio play failed:", err));
+
+        //mint new recipe by footer
+      } else {
+        console.log("recipe not exists");
+        setIsFooterMintVisible(false);
+        setIsFooterDefineVisible(true);
+        setFooterNodeA(node);
+        setFooterNodeB(overlappingNode);
+      }
+    }
+  };
+
+  //flow settings
+  const reactFlowWrapper = useRef<any>(null);
+  const nodeTypes = {
+    custom: CustomNode,
+  };
+  const defaultEdgeOptions = {
+    animated: true,
+    type: "smoothstep",
+  };
+
+  useEffect(() => {
+    const storedSideNodes = localStorage.getItem('sideNodes');
+    if (storedSideNodes !== null) {
+      const parsedSideNodes = JSON.parse(storedSideNodes);
+      // Verify that parsedSideNodes is an array and its length is greater than zero
+      if (Array.isArray(parsedSideNodes) && parsedSideNodes.length > 0) {
+        setSideNodes(parsedSideNodes);
+      }
+    } else {
+      // If no sideNodes exist in localStorage.
+      setSideNodes(defaultSideNodes);
+    }
+  }, []);
+  
+
+  useEffect(() => {
+    // Save to localStorage when sideNodes are updated.
+    localStorage.setItem('sideNodes', JSON.stringify(sideNodes));
+  }, [sideNodes]);
+
+  return (
+    <div className="flex flex-row flex-grow">
+      <div className="flex flex-col h-screen w-full">
+        <div className="flex-grow h-full w-full" ref={reactFlowWrapper}>
+          <ReactFlow
+            nodes={nodes}
+            onNodeDragStart={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
+            onNodesChange={onNodesChange}
+            edges={edges}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            onInit={setReactFlowInstance}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            nodeTypes={nodeTypes}
+            defaultEdgeOptions={defaultEdgeOptions}
+            connectionLineType={ConnectionLineType.SmoothStep}
+            fitView
+          >
+            <Controls />
+            <Background />
+          </ReactFlow>
+        </div>
+        {isFooterDefineVisible && (
+          <FooterDefine
+            nodeA={footerNodeA}
+            nodeB={footerNodeB}
+            footerInput={footerInput}
+            setFooterInput={setFooterInput}
+            updateNodeFromFooter={updateNodeFromFooter}
+            isLoading={isPending || isConfirming}
+          />
+        )}
+        {isFooterMintVisible && (
+          <FooterMint
+            node={footerNode}
+            nodeA={footerNodeA}
+            nodeB={footerNodeB}
+          />
+        )}
+      </div>
+      <Sidebar sideNodes={sideNodes} />
+    </div>
+  );
+};
+
+export default Flow;
+import { memo, FC, CSSProperties } from "react";
+import { Handle, Position, NodeProps, NodeResizer } from "reactflow";
+
+const sourceHandleStyleA: CSSProperties = { left: 50 };
+const sourceHandleStyleB: CSSProperties = {
+  right: 50,
+  left: "auto",
+};
+
+const CustomNode: FC<NodeProps> = ({ data, xPos, yPos }) => {
+  return (
+    <>
+      <div
+        className="border border-gray-300 bg-white px-2 py-1 m-1 rounded-md overflow-hidden hover:bg-gradient-to-b"
+      >
+        <span className="font-semibold mr-1">{data.emoji}</span>
+        <span className="font-semibold">{data.label}</span>
+      </div>
+    </>
+  );
+};
+
+export default memo(CustomNode);
+import type { NextPage } from "next";
+import Head from "next/head";
+import { useState, useEffect } from "react";
+
+import Flow from "components/Flow";
+import { ReactFlowProvider } from "react-flow-renderer";
+import Sidebar from "components/Sidebar";
+import { Toaster } from "@/components/ui/toaster"
+import { Toaster as ToasterSonner } from "@/components/ui/sonner"
+
+import { Node } from "reactflow";
+
+const Home: NextPage = () => {
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+
+  useEffect(() => {
+    // Run this effect once on mount
+    const handleResize = () => {
+      // Consider "mobile" if width is less than or equal to 768 pixels
+      setIsMobile(window.innerWidth <= 768);
+    };
+
+    // Check once on mount
+    handleResize();
+
+    // Optionally listen for resize events if you want to dynamically change the view
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup the event listener on component unmount
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  return (
+    <div className="flex flex-col h-screen">
+      <Head>
+      <title>Zeta Craft</title>
+        <meta property='og:title' content='Zeta Craft - Generate infinite recipe and earn points' />
+        <meta
+          property='og:description'
+          content='Zeta Craft  is a Fully on chain UGC game you can create new recipes by mixing recipes with recipes.'
+        />
+        <meta property='og:image' content='/ogp.png' />
+        <link rel='icon' type='image/png' sizes='16x16' href='/favicon-16x16.png' />
+        <link rel='icon' type='image/png' sizes='32x32' href='/favicon-32x32.png' />
+        <link rel='apple-touch-icon' sizes='200x200' href='/apple-touch-icon.png' />
+        <meta name='twitter:card' content='summary_large_image' />
+        <meta name='twitter:title' content='Zeta Craft - Generate infinite recipe and earn points' />
+        <meta
+          name='twitter:description'
+          content='Zeta Craft  is a Fully on chain UGC game you can create new recipes by mixing recipes with recipes.'
+        />
+        <meta
+          name='twitter:image'
+          content='https://Zetacraft.vercel.app/ogp.png'
+        />
+      </Head>
+      <div className="flex flex-grow">
+        <ReactFlowProvider>
+        {!isMobile ? (
+            <Flow />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <span>Unavailable on mobile</span>
+            </div>
+          )}
+          <Toaster />
+        </ReactFlowProvider>
+        <ToasterSonner position="top-center" />
+      </div>
+    </div>
+  );
+};
+
+export default Home;
+import type { AppProps } from "next/app";
+import "../styles/globals.css";
+import "reactflow/dist/style.css";
+import { WagmiProvider, createConfig, http } from "wagmi";
+import { baseSepolia, base } from "wagmi/chains";
+import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
+import { ConnectKitProvider, getDefaultConfig } from "connectkit";
+import { GoogleAnalytics } from "@next/third-parties/google";
+
+const config = createConfig(
+  getDefaultConfig({
+    // Your dApps chains
+    chains: [base],
+    transports: {
+      [base.id]: http(base.rpcUrls.default.http[0]),
+    },
+    // Required API Keys
+    walletConnectProjectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID!,
+
+    ssr: true,
+
+    // Required App Info
+    appName: "Your App Name",
+
+    // Optional App Info
+    appDescription: "Your App Description",
+    appUrl: "https://family.co", // your app's url
+    appIcon: "https://family.co/logo.png", // your app's icon, no bigger than 1024x1024px (max. 1MB)
+  })
+);
+
+const queryClient = new QueryClient();
+function MyApp({ Component, pageProps }: AppProps) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        <ConnectKitProvider>
+          <Component {...pageProps} />
+          <GoogleAnalytics
+            gaId={process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_ID || ""}
+          />
+        </ConnectKitProvider>
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+
+export default MyApp;
+import * as React from "react"
+import * as ToastPrimitives from "@radix-ui/react-toast"
+import { cva, type VariantProps } from "class-variance-authority"
+import { X } from "lucide-react"
+
+import { cn } from "@/lib/utils"
+
+const ToastProvider = ToastPrimitives.Provider
+
+const ToastViewport = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Viewport>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Viewport>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Viewport
+    ref={ref}
+    className={cn(
+      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      className
+    )}
+    {...props}
+  />
+))
+ToastViewport.displayName = ToastPrimitives.Viewport.displayName
+
+const toastVariants = cva(
+  "group pointer-events-auto relative flex w-full items-center justify-between space-x-4 overflow-hidden rounded-md border p-6 pr-8 shadow-lg transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  {
+    variants: {
+      variant: {
+        default: "border bg-background text-foreground",
+        destructive:
+          "destructive group border-destructive bg-destructive text-destructive-foreground",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+    },
+  }
+)
+
+const Toast = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Root>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
+    VariantProps<typeof toastVariants>
+>(({ className, variant, ...props }, ref) => {
+  return (
+    <ToastPrimitives.Root
+      ref={ref}
+      className={cn(toastVariants({ variant }), className)}
+      {...props}
+    />
+  )
+})
+Toast.displayName = ToastPrimitives.Root.displayName
+
+const ToastAction = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Action>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Action>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Action
+    ref={ref}
+    className={cn(
+      "inline-flex h-8 shrink-0 items-center justify-center rounded-md border bg-transparent px-3 text-sm font-medium ring-offset-background transition-colors hover:bg-secondary focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 group-[.destructive]:border-muted/40 group-[.destructive]:hover:border-destructive/30 group-[.destructive]:hover:bg-destructive group-[.destructive]:hover:text-destructive-foreground group-[.destructive]:focus:ring-destructive",
+      className
+    )}
+    {...props}
+  />
+))
+ToastAction.displayName = ToastPrimitives.Action.displayName
+
+const ToastClose = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Close>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Close>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Close
+    ref={ref}
+    className={cn(
+      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
+      className
+    )}
+    toast-close=""
+    {...props}
+  >
+    <X className="h-4 w-4" />
+  </ToastPrimitives.Close>
+))
+ToastClose.displayName = ToastPrimitives.Close.displayName
+
+const ToastTitle = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Title>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Title>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Title
+    ref={ref}
+    className={cn("text-sm font-semibold", className)}
+    {...props}
+  />
+))
+ToastTitle.displayName = ToastPrimitives.Title.displayName
+
+const ToastDescription = React.forwardRef<
+  React.ElementRef<typeof ToastPrimitives.Description>,
+  React.ComponentPropsWithoutRef<typeof ToastPrimitives.Description>
+>(({ className, ...props }, ref) => (
+  <ToastPrimitives.Description
+    ref={ref}
+    className={cn("text-sm opacity-90", className)}
+    {...props}
+  />
+))
+ToastDescription.displayName = ToastPrimitives.Description.displayName
+
+type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
+
+type ToastActionElement = React.ReactElement<typeof ToastAction>
+
+export {
+  type ToastProps,
+  type ToastActionElement,
+  ToastProvider,
+  ToastViewport,
+  Toast,
+  ToastTitle,
+  ToastDescription,
+  ToastClose,
+  ToastAction,
+}
+"use client"
+
+import { useTheme } from "next-themes"
+import { Toaster as Sonner } from "sonner"
+
+type ToasterProps = React.ComponentProps<typeof Sonner>
+
+const Toaster = ({ ...props }: ToasterProps) => {
+  const { theme = "system" } = useTheme()
+
+  return (
+    <Sonner
+      theme={theme as ToasterProps["theme"]}
+      className="toaster group"
+      toastOptions={{
+        classNames: {
+          toast:
+            "group toast group-[.toaster]:bg-background group-[.toaster]:text-foreground group-[.toaster]:border-border group-[.toaster]:shadow-lg",
+          description: "group-[.toast]:text-muted-foreground",
+          actionButton:
+            "group-[.toast]:bg-primary group-[.toast]:text-primary-foreground",
+          cancelButton:
+            "group-[.toast]:bg-muted group-[.toast]:text-muted-foreground",
+        },
+      }}
+      {...props}
+    />
+  )
+}
+
+export { Toaster }
+"use client"
+
+import {
+  Toast,
+  ToastClose,
+  ToastDescription,
+  ToastProvider,
+  ToastTitle,
+  ToastViewport,
+} from "@/components/ui/toast"
+import { useToast } from "@/components/ui/use-toast"
+
+export function Toaster() {
+  const { toasts } = useToast()
+  // TODO: Production exploer URL
+  return (
+    <ToastProvider>
+      {toasts.map(function ({ id, title, description, action, ...props }) {
+        return (
+          <Toast key={id} {...props}>
+            <div className="grid gap-1">
+              {title && <ToastTitle>{title}</ToastTitle>}
+              {description && (
+                <ToastDescription>
+                  {typeof description === 'string' &&
+                  description.startsWith('0x') ? (
+                    <a
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline break-all"
+                      href={`https://basescan.org/tx/${description}`}
+                    >
+                      {description}
+                    </a>
+                  ) : (
+                    <span className="break-all">{description}</span>
+                  )}
+                </ToastDescription>
+              )}
+            </div>
+            {action}
+            <ToastClose />
+          </Toast>
+        )
+      })}
+      <ToastViewport />
+    </ToastProvider>
+  )
+}
