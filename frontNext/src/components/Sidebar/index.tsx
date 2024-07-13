@@ -134,7 +134,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sideNodes: sideNodes }) => {
           </div>
         </div>
         <div className="p-4 text-center border-t border-gray-200 flex items-center justify-center h-12">
-          <ul className="flex flex-wrap items-center mt-3 text-sm  text-gray-400 sm:mt-0">
+          {/* <ul className="flex flex-wrap items-center mt-3 text-sm  text-gray-400 sm:mt-0">
             <li>
               <a
                 target="_blank"
@@ -153,7 +153,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sideNodes: sideNodes }) => {
                 Github
               </a>
             </li>
-          </ul>
+          </ul> */}
         </div>
       </div>
     </div>

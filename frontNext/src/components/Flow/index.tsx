@@ -188,7 +188,7 @@ const Flow: React.FC = () => {
               label: "Share on X",
               onClick: () => {
                 const shareText = encodeURIComponent(
-                  `I defined a new recipe for Zeta Craft.\nThe recipe count reached ${new_craft_id}. @0xBaratie @nealagarwal\nhttps://Zetacraft.vercel.app/`
+                  `I defined a new recipe for Zeta Craft.\nThe recipe count reached ${new_craft_id}. @0xBaratie developer of MugenCraft   @nealagarwal\n https://zetacraft.vercel.app/`
                 );
                 const hashtags = encodeURIComponent("Zetacraft,buildonbase");
                 const related = encodeURIComponent("twitterapi,twitter");
