@@ -1,8 +1,5 @@
 # Zeta Craft
 
-Zeta Craft is Fork of Zeta Craft on Zeta Omni Chain
-
-
 ## Specifications
 
 ### Main system
@@ -33,9 +30,3 @@ bun dev
 Zetachain
 ## Library
 React Flow
-
-## Reference
-Our work is inspired by the wonderful games.
-- https://neal.fun/infinite-craft/
-
-Mugen Craft Inspired on Zeta Chain
