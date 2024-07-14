@@ -30,7 +30,9 @@ bun dev
 
 zeta_testnet
 📜 Contract address: 0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
+
 🌍 ZetaScan: https://athens.explorer.zetachain.com/address/0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
+
 🌍 Blockcsout: https://zetachain-athens-3.blockscout.com/address/0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
 
 ## Chain
