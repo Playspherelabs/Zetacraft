@@ -3,7 +3,7 @@ import { Node } from "reactflow";
 import { ConnectWallet } from "components/Button/ConnectWallet";
 import { useAccount, useReadContracts } from "wagmi";
 import { ZetaRecipeAbi } from "constants/MugenRecipeAbi";
-import { ZetaTokenAbi } from "constants/MugenTokenAbi";
+import { ZetaTokenAbi } from "constants/ZetatokenAbi";
 import { addresses } from "constants/addresses";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
