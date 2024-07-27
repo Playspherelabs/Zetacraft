@@ -29,11 +29,13 @@ bun dev
 ## Deployed Contract
 
 zeta_testnet
-📜 Contract address: 0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
 
-🌍 ZetaScan: https://athens.explorer.zetachain.com/address/0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
+🚀 Successfully deployed contract on zeta_testnet.
+📜 Contract address: 0x5CD734CC7a989879BA9EB626f934cd722766b323
+🌍 ZetaScan: https://athens.explorer.zetachain.com/address/0x5CD734CC7a989879BA9EB626f934cd722766b323
+🌍 Blockcsout: https://zetachain-athens-3.blockscout.com/address/0x5CD734CC7a989879BA9EB626f934cd722766b323
 
-🌍 Blockcsout: https://zetachain-athens-3.blockscout.com/address/0xEC6A3b7Da0531e71e878223c95b1cEF097C15f33
+
 
 ## Chain
 Zetachain
