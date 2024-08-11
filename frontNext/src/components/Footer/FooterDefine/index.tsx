@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unescaped-entities */
 import React, { useState, useEffect } from "react";
 import { Node } from "reactflow";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
@@ -7,16 +6,13 @@ import Image from "next/image";
 import { useAccount } from "wagmi";
 import { ConnectWallet } from "components/Button/ConnectWallet";
 import LoadingIndicator from "components/LoadingIndicator";
-import {
-  InformationCircleIcon,
-} from '@heroicons/react/20/solid'
+import { InformationCircleIcon } from '@heroicons/react/20/solid';
+
 interface FooterDefineProps {
   nodeA: Node | undefined;
   nodeB: Node | undefined;
   footerInput: { label: string; emoji: string };
-  setFooterInput: React.Dispatch<
-    React.SetStateAction<{ label: string; emoji: string }>
-  >;
+  setFooterInput: React.Dispatch<React.SetStateAction<{ label: string; emoji: string }>>;
   updateNodeFromFooter: () => void;
   isLoading: boolean;
 }
@@ -35,14 +31,14 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
   const { toast } = useToast();
   const { isConnected } = useAccount();
   const [isHovered, setIsHovered] = useState(false);
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+  const [isGeneratingNameAndEmoji, setIsGeneratingNameAndEmoji] = useState(false);
 
   useEffect(() => {
-    // Disable buttons by default
     let isDisabled = true;
     let message = "";
 
     if (footerInput.label.length === 0) {
-      // Empty input does not display a message and disables the button
       message = "";
     } else if (footerInput.label.length > 30) {
       message = "The label must be within 30 characters.";
@@ -51,9 +47,8 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
     } else if (!/^[A-Z][A-Za-z0-9 ]*$/.test(footerInput.label)) {
       message = "Use only alphanumeric characters and spaces.";
     } else {
-      // If all validations are passed, activate the button
       isDisabled = false;
-      message = ""; // Clear if no validation message
+      message = "";
     }
 
     if (message) {
@@ -64,7 +59,44 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
     }
 
     setIsButtonDisabled(isDisabled);
-  }, [footerInput.label,toast]);
+  }, [footerInput.label, toast]);
+  const generateAINameAndEmoji = async () => {
+    if (!nodeA || !nodeB) return;
+
+    setIsGeneratingNameAndEmoji(true);
+    try {
+      const response = await fetch('/api/openai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ingredient1: nodeA.data.label,
+          ingredient2: nodeB.data.label,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate name and emoji');
+      }
+
+      const data = await response.json();
+      setFooterInput(prev => ({ 
+        label: data.name.replace(/"/g, ''), // Remove any double quotes
+        emoji: data.emoji
+      }));
+    } catch (error) {
+      console.error('Error generating name and emoji:', error);
+      toast({
+        title: "Error generating name and emoji",
+        description: "Failed to generate a name and emoji using AI.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingNameAndEmoji(false);
+    }
+  };
+
 
   if (!nodeA || !nodeB) return null;
 
@@ -152,7 +184,7 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
           <>
             <div
               className="fixed inset-0"
-              onClick={() => setShowEmojiPicker(false)} // Close EmojiPicker when the overlay is clicked.
+              onClick={() => setShowEmojiPicker(false)}
             ></div>
             <div className="fixed left-12 bottom-0 bg-white shadow-md p-4 flex justify-between items-center z-100">
               <EmojiPicker
@@ -193,7 +225,19 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
           onMouseDown={(e) => e.stopPropagation()}
           className="border border-gray-300 rounded-md p-2 m-1 flex-1"
         />
-        {isConnected ? (
+      {isConnected ? (
+        <>
+          <button
+            onClick={generateAINameAndEmoji}
+            disabled={isGeneratingNameAndEmoji}
+            className={`${
+              isGeneratingNameAndEmoji
+                ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                : "bg-green-500 hover:bg-green-600"
+            } text-white font-bold py-2 px-4 rounded m-1`}
+          >
+            {isGeneratingNameAndEmoji ? <LoadingIndicator /> : "Generate AI Name & Emoji"}
+          </button>
           <button
             onClick={updateNodeFromFooter}
             disabled={isButtonDisabled}
@@ -203,13 +247,12 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
                 : "bg-blue hover:bg-blueHover"
             } text-white font-bold py-2 px-4 rounded m-1`}
           >
-            {isLoading ? (
-              <LoadingIndicator />
-            ) : "Define"}
+            {isLoading ? <LoadingIndicator /> : "Define"}
           </button>
-        ) : (
-          <ConnectWallet />
-        )}
+        </>
+      ) : (
+        <ConnectWallet />
+      )}
       </div>
     </>
   );
