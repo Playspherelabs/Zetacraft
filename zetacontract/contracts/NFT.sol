@@ -107,7 +107,7 @@ contract NFT is zContract, ERC721URIStorage, OnlySystem, Ownable {
         delete tokenChains[tokenId];
     }
 
-    function createRecipe(uint256 _id1, uint256 _id2, string memory _name, string memory _emojiName) external {
+  function createRecipe(uint256 _id1, uint256 _id2, string memory _name, string memory _emojiName) external {
         require(_id1 != _id2, "Ingredients must be different");
         require(recipeIdByIngredients[_id1][_id2] == 0, "Recipe already exists");
 
@@ -166,5 +166,13 @@ contract NFT is zContract, ERC721URIStorage, OnlySystem, Ownable {
             allRecipes[i - 1] = recipes[i];
         }
         return allRecipes;
+    }
+
+    // New function to get recipe information including token URI
+    function getRecipeInfo(uint256 _recipeId) external view returns (Recipe memory, string memory) {
+        require(_exists(_recipeId), "Recipe does not exist");
+        Recipe memory recipe = recipes[_recipeId];
+        string memory uri = tokenURI(_recipeId);
+        return (recipe, uri);
     }
 }
