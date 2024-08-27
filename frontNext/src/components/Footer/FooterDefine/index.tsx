@@ -1,23 +1,20 @@
-/* eslint-disable react/no-unescaped-entities */
 import React, { useState, useEffect } from "react";
 import { Node } from "reactflow";
 import EmojiPicker, { EmojiClickData } from "emoji-picker-react";
 import { useToast } from "@/components/ui/use-toast";
 import Image from "next/image";
-import { useAccount } from "wagmi";
+import { useAccount, useWriteContract, useReadContract, useReadContracts, useWaitForTransactionReceipt } from "wagmi";
 import { ConnectWallet } from "components/Button/ConnectWallet";
 import LoadingIndicator from "components/LoadingIndicator";
-import {
-  InformationCircleIcon,
-} from '@heroicons/react/20/solid'
+import { InformationCircleIcon } from '@heroicons/react/20/solid';
+import { ZetaTokenAbi } from "constants/ZetatokenAbi";
+import { addresses } from "constants/addresses";
+
 interface FooterDefineProps {
   nodeA: Node | undefined;
   nodeB: Node | undefined;
   footerInput: { label: string; emoji: string };
-  setFooterInput: React.Dispatch<
-    React.SetStateAction<{ label: string; emoji: string }>
-  >;
-  updateNodeFromFooter: () => void;
+  setFooterInput: React.Dispatch<React.SetStateAction<{ label: string; emoji: string }>>;
   isLoading: boolean;
 }
 
@@ -26,23 +23,91 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
   nodeB,
   footerInput,
   setFooterInput,
-  updateNodeFromFooter,
   isLoading,
 }) => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isButtonDisabled, setIsButtonDisabled] = useState(true);
   const [validationMessage, setValidationMessage] = useState("");
   const { toast } = useToast();
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const [isHovered, setIsHovered] = useState(false);
+  const [isGeneratingNameAndEmoji, setIsGeneratingNameAndEmoji] = useState(false);
+  const [minted, setMinted] = useState(false);
+  const [sum, setSum] = useState(0);
+
+  const { data: hash, isPending, error, writeContract } = useWriteContract();
+
+  const ZetaTokenContract = {
+    address: addresses.ZetaToken as `0x${string}`,
+    abi: ZetaTokenAbi,
+  } as const;
+
+  const results = useReadContracts({
+    contracts: [
+      {
+        ...ZetaTokenContract,
+        functionName: "balanceOf",
+        args: [address as `0x${string}`, BigInt(nodeA?.data.craft_id || 0)],
+      },
+      {
+        ...ZetaTokenContract,
+        functionName: "totalSupply",
+        args: [BigInt(nodeA?.data.craft_id || 0)],
+      },
+    ],
+  });
+
+  const { data: recipeExists } = useReadContract({
+    ...ZetaTokenContract,
+    functionName: "getRecipeIdByIngredients",
+    args: [BigInt(nodeA?.data.craft_id || 0), BigInt(nodeB?.data.craft_id || 0)],
+  });
+
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash,
+    });
 
   useEffect(() => {
-    // Disable buttons by default
+    if (results.isSuccess) {
+      const resultTotalSupply = results.data[1].result;
+      const sum =
+        resultTotalSupply != null ? Number(resultTotalSupply.toString()) : 0;
+      setSum(sum);
+    }
+  }, [results]);
+
+  useEffect(() => {
+    if (recipeExists !== undefined) {
+      setMinted(BigInt(recipeExists?.toString() || "0") !== BigInt(0));
+    }
+  }, [recipeExists]);
+
+  useEffect(() => {
+    if (isConfirmed) {
+      toast({
+        title: "Recipe created",
+        description: `Transaction hash: ${hash}`,
+      });
+      setMinted(true);
+    }
+  }, [isConfirmed, hash, toast]);
+
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error creating recipe",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
+
+  useEffect(() => {
     let isDisabled = true;
     let message = "";
 
     if (footerInput.label.length === 0) {
-      // Empty input does not display a message and disables the button
       message = "";
     } else if (footerInput.label.length > 30) {
       message = "The label must be within 30 characters.";
@@ -51,9 +116,8 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
     } else if (!/^[A-Z][A-Za-z0-9 ]*$/.test(footerInput.label)) {
       message = "Use only alphanumeric characters and spaces.";
     } else {
-      // If all validations are passed, activate the button
       isDisabled = false;
-      message = ""; // Clear if no validation message
+      message = "";
     }
 
     if (message) {
@@ -64,60 +128,79 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
     }
 
     setIsButtonDisabled(isDisabled);
-  }, [footerInput.label,toast]);
+  }, [footerInput.label, toast]);
+
+  const generateAINameAndEmoji = async () => {
+    if (!nodeA || !nodeB) return;
+
+    setIsGeneratingNameAndEmoji(true);
+    try {
+      const response = await fetch('/api/openai', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ingredient1: nodeA.data.label,
+          ingredient2: nodeB.data.label,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate name and emoji');
+      }
+
+      const data = await response.json();
+      setFooterInput(prev => ({ 
+        label: data.name.replace(/"/g, ''), // Remove any double quotes
+        emoji: data.emoji
+      }));
+    } catch (error) {
+      console.error('Error generating name and emoji:', error);
+      toast({
+        title: "Error generating name and emoji",
+        description: "Failed to generate a name and emoji using AI.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsGeneratingNameAndEmoji(false);
+    }
+  };
+
+  const createRecipe = async () => {
+    if (!nodeA || !nodeB) return;
+
+    writeContract({
+      address: addresses.ZetaToken as `0x${string}`,
+      abi: ZetaTokenAbi,
+      functionName: "createRecipe",
+      args: [
+        BigInt(nodeA.data.craft_id),
+        BigInt(nodeB.data.craft_id),
+        footerInput.label,
+        footerInput.emoji,
+      ],
+    });
+  };
 
   if (!nodeA || !nodeB) return null;
 
   return (
-    <>
-      <div className="flex items-left">
-        <p className="ml-4 font-bold text-gray-400">
-          Good recipe creator will be rewarded!
-        </p>
-        <div
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
-          className="relative"
-        >
-          <InformationCircleIcon className="h-auto w-6 text-gray-400 ml-2" />
-          {isHovered && (
-            <div className="absolute z-30 left-full -top-48 p-4 bg-white shadow-lg rounded-lg text-sm w-[720px]">
-              <p className="font-bold mb-2">Here's how you can earn points through recipe creation:</p>
-              <ul className="list-disc list-inside">
-                <li>Creating a Recipe: You'll earn <strong className="text-blue">200 points</strong> when you define a new recipe.</li>
-                <li>Recipe Minting: Each time someone mints your recipe, you'll receive <strong className="text-blue">100 points</strong>, with no limit on the number of mints.</li>
-                <li>Recipe Assistance: If your recipe is used in the creation of another recipe, and that recipe gets minted, you'll earn <strong className="text-blue">50 points</strong>.</li>
-              </ul>
-              <p className="mt-2">This system encourages the creation of practical and valuable recipes. Points will not be awarded for random or nonsensical recipes.</p>
-            </div>
-          )}
-        </div>
+    <div className="left-12 inset-x-0 bottom-0 bg-white p-4 flex items-center justify-center z-10 mx-auto">
+      <p className="mx-2 font-bold">{`${sum} minted`}</p>
+      <div className="mx-2 items-center border border-gray-100 bg-gray-100 rounded-md">
+        {nodeA.data.label && nodeB.data.label ? (
+          <div className="p-2">
+            <span className="font-bold">{`${nodeA.data.emoji}${nodeA.data.label} + ${nodeB.data.emoji}${nodeB.data.label}`}</span>
+          </div>
+        ) : null}
       </div>
-      <div className="left-12 bottom-0 bg-white shadow-md p-4 flex justify-between items-center z-10">
-        <div className="relative flex items-center justify-center space-x-4">
-          <div className="flex items-center border border-gray-100 bg-gray-100 rounded-md">
-            {nodeA.data.label ? (
-              <div className="p-2">
-                <span className="font-bold">{`${nodeA.data.emoji}${nodeA.data.label}`}</span>
-              </div>
-            ) : null}
-          </div>
-          <span className="flex items-center">+</span>
-          <div className="flex items-center border border-gray-100 bg-gray-100 rounded-md">
-            {nodeB.data.label ? (
-              <div className="p-2">
-                <span className="font-bold">{`${nodeB.data.emoji}${nodeB.data.label}`}</span>
-              </div>
-            ) : null}
-          </div>
-        </div>
-        <span className="flex items-center mx-2">=</span>
-
-        <button className="flex items-center justify-between border border-gray-300 text-gray-400  py-2 px-2 rounded min-w-40">
+      <p className="mx-2">{" -> "}</p>
+      <div className="flex items-center">
+        <button className="flex items-center justify-between border border-gray-300 text-gray-400 py-2 px-2 rounded min-w-40 mr-2">
           <div>
             {footerInput.emoji.length > 0 ? footerInput.emoji : "Emoji"}
           </div>
-
           <div className="flex-shrink-0 flex items-center">
             <Image
               src="/svg/emoji-smile.svg"
@@ -147,41 +230,6 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
             />
           </div>
         </button>
-
-        {showEmojiPicker && (
-          <>
-            <div
-              className="fixed inset-0"
-              onClick={() => setShowEmojiPicker(false)} // Close EmojiPicker when the overlay is clicked.
-            ></div>
-            <div className="fixed left-12 bottom-0 bg-white shadow-md p-4 flex justify-between items-center z-100">
-              <EmojiPicker
-                onEmojiClick={(emojiData: EmojiClickData, event: MouseEvent) => {
-                  setFooterInput((prev) => {
-                    const emojiCount = prev.emoji
-                      .split(" ")
-                      .filter(Boolean).length;
-
-                    if (emojiCount < 3) {
-                      const newEmoji =
-                        prev.emoji + (prev.emoji ? " " : "") + emojiData.emoji;
-                      return { ...prev, emoji: newEmoji };
-                    } else {
-                      toast({
-                        title: "Input alert🚨",
-                        description: "Maximum of 3 emojis",
-                      });
-                      return prev;
-                    }
-                  });
-                  setShowEmojiPicker(false);
-                }}
-                autoFocusSearch={false}
-              />
-            </div>
-          </>
-        )}
-
         <input
           type="text"
           name="label"
@@ -191,27 +239,77 @@ const FooterDefine: React.FC<FooterDefineProps> = ({
             setFooterInput((prev) => ({ ...prev, label: e.target.value }))
           }
           onMouseDown={(e) => e.stopPropagation()}
-          className="border border-gray-300 rounded-md p-2 m-1 flex-1"
+          className="border border-gray-300 rounded-md p-2 mr-2 flex-1"
         />
-        {isConnected ? (
-          <button
-            onClick={updateNodeFromFooter}
-            disabled={isButtonDisabled}
-            className={`${
-              isButtonDisabled
-                ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
-                : "bg-blue hover:bg-blueHover"
-            } text-white font-bold py-2 px-4 rounded m-1`}
-          >
-            {isLoading ? (
-              <LoadingIndicator />
-            ) : "Define"}
-          </button>
-        ) : (
-          <ConnectWallet />
-        )}
       </div>
-    </>
+      {isConnected ? (
+        <>
+          <button
+            onClick={generateAINameAndEmoji}
+            disabled={isGeneratingNameAndEmoji}
+            className={`${
+              isGeneratingNameAndEmoji
+                ? "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+                : "bg-green-500 hover:bg-green-600"
+            } text-white font-bold py-2 px-4 rounded mr-2`}
+          >
+            {isGeneratingNameAndEmoji ? <LoadingIndicator /> : "Generate AI"}
+          </button>
+          <button
+            onClick={createRecipe}
+            disabled={minted || isPending || isConfirming || isButtonDisabled}
+            className={`${
+              !minted && !isButtonDisabled
+                ? "bg-blue hover:bg-blueHover"
+                : "bg-gray-400 hover:bg-gray-400 cursor-not-allowed"
+            } text-white font-bold py-2 px-4 rounded`}
+          >
+            {isPending || isConfirming ? (
+              <LoadingIndicator />
+            ) : minted ? (
+              "Recipe already exists"
+            ) : (
+              "Create Recipe"
+            )}
+          </button>
+        </>
+      ) : (
+        <ConnectWallet buttonText="Connect to create recipe" />
+      )}
+      {showEmojiPicker && (
+        <>
+          <div
+            className="fixed inset-0"
+            onClick={() => setShowEmojiPicker(false)}
+          ></div>
+          <div className="fixed left-12 bottom-16 bg-white shadow-md p-4 flex justify-between items-center z-50">
+            <EmojiPicker
+              onEmojiClick={(emojiData: EmojiClickData, event: MouseEvent) => {
+                setFooterInput((prev) => {
+                  const emojiCount = prev.emoji
+                    .split(" ")
+                    .filter(Boolean).length;
+
+                  if (emojiCount < 3) {
+                    const newEmoji =
+                      prev.emoji + (prev.emoji ? " " : "") + emojiData.emoji;
+                    return { ...prev, emoji: newEmoji };
+                  } else {
+                    toast({
+                      title: "Input alert🚨",
+                      description: "Maximum of 3 emojis",
+                    });
+                    return prev;
+                  }
+                });
+                setShowEmojiPicker(false);
+              }}
+              autoFocusSearch={false}
+            />
+          </div>
+        </>
+      )}
+    </div>
   );
 };
 

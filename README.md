@@ -35,7 +35,9 @@ zeta_testnet
 🌍 ZetaScan: https://athens.explorer.zetachain.com/address/0x5CD734CC7a989879BA9EB626f934cd722766b323
 🌍 Blockcsout: https://zetachain-athens-3.blockscout.com/address/0x5CD734CC7a989879BA9EB626f934cd722766b323
 
+All Tokens Available
 
+https://zetachain-athens-3.blockscout.com/token/0x5CD734CC7a989879BA9EB626f934cd722766b323
 
 ## Chain
 Zetachain

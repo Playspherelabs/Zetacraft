@@ -27,7 +27,8 @@ const FooterMint: React.FC<FooterMintProps> = ({ node, nodeA, nodeB }) => {
   const [metadata, setMetadata] = useState<any>(null);
   const [metadataError, setMetadataError] = useState<string | null>(null);
   const { toast } = useToast();
-
+  const [isGeneratingName, setIsGeneratingName] = useState(false);
+  const [generatedName, setGeneratedName] = useState("");
   const ZetaTokenContract = {
     address: addresses.ZetaToken as `0x${string}`,
     abi: ZetaTokenAbi,
@@ -64,6 +65,42 @@ const FooterMint: React.FC<FooterMintProps> = ({ node, nodeA, nodeB }) => {
     useWaitForTransactionReceipt({
       hash,
     });
+
+    const generateAIName = async () => {
+      if (!nodeA || !nodeB) return;
+  
+      setIsGeneratingName(true);
+      try {
+        const response = await fetch('/api/generateRecipeName', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            ingredient1: nodeA.data.label,
+            ingredient2: nodeB.data.label,
+          }),
+        });
+  
+        if (!response.ok) {
+          throw new Error('Failed to generate name');
+        }
+  
+        const data = await response.json();
+        setGeneratedName(data.name);
+      } catch (error) {
+        console.error('Error generating name:', error);
+        toast({
+          title: "Error generating name",
+          description: "Failed to generate a name using AI.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsGeneratingName(false);
+      }
+    };
+  
+    
 
   useEffect(() => {
     if (results.isSuccess) {
@@ -113,6 +150,8 @@ const FooterMint: React.FC<FooterMintProps> = ({ node, nodeA, nodeB }) => {
   const writeMint = async () => {
     if (!node || !nodeA || !nodeB) return;
 
+    const nameToUse = generatedName || node.data.label;
+
     writeContract({
       address: addresses.ZetaToken as `0x${string}`,
       abi: ZetaTokenAbi,
@@ -120,7 +159,7 @@ const FooterMint: React.FC<FooterMintProps> = ({ node, nodeA, nodeB }) => {
       args: [
         BigInt(nodeA.data.craft_id),
         BigInt(nodeB.data.craft_id),
-        node.data.label,
+        nameToUse,
         node.data.emoji as string,
       ],
     });

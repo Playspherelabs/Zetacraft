@@ -427,7 +427,6 @@ const Flow: React.FC = () => {
             nodeB={footerNodeB}
             footerInput={footerInput}
             setFooterInput={setFooterInput}
-            updateNodeFromFooter={updateNodeFromFooter}
             isLoading={isPending || isConfirming}
           />
         )}
